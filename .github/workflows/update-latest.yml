@@ -11,36 +11,37 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install deps
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install aiohttp
+
+      - name: Reset to latest main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
 
       - name: Run updater
         run: |
           python scripts/update_latest.py
 
-      - name: Commit & push (no merge conflicts)
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Make sure we're up to date, but DO NOT rebase/merge generated json
-          git fetch origin main
-          git reset --hard origin/main
-
-          # Re-run generation after reset (so file matches current HEAD)
-          python scripts/update_latest.py
-
           git add data/latest.json
           git commit -m "Update data/latest.json" || echo "No changes to commit"
-          git push
+          git push origin main
