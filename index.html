@@ -1,49 +1,321 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>DeFi Rates</title>
+    <title>DeFi Rate Tracker</title>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
-      .card { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin-top: 12px; }
-      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #0f0; padding: 12px; border-radius: 10px; overflow:auto; }
+      :root {
+        --bg: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --border: #e5e7eb;
+        --card: #ffffff;
+        --shadow: 0 10px 24px rgba(0,0,0,.06);
+        --pill: #f3f4f6;
+        --pillActive: #111827;
+        --pillActiveText: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; }
+      header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+      h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
+      .sub { margin-top: 6px; color: var(--muted); font-size: 14px; }
+      .right { text-align:right; }
+      .updated { color: var(--muted); font-size: 13px; }
+
+      .controls {
+        margin-top: 18px;
+        display:flex;
+        gap: 10px;
+        align-items:center;
+        flex-wrap: wrap;
+      }
+      .tabs { display:flex; gap:8px; padding: 6px; border:1px solid var(--border); border-radius: 999px; background: var(--pill); }
+      .tab {
+        border: 0;
+        background: transparent;
+        padding: 8px 12px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .tab.active { background: var(--pillActive); color: var(--pillActiveText); }
+      .search {
+        flex: 1;
+        min-width: 220px;
+        display:flex;
+        gap:8px;
+        align-items:center;
+        border:1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #fff;
+      }
+      .search input {
+        width: 100%;
+        border: 0;
+        outline: none;
+        font-size: 14px;
+      }
+
+      .card {
+        margin-top: 14px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      table { width: 100%; border-collapse: collapse; }
+      thead th {
+        text-align: left;
+        font-size: 12px;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        background: #fafafa;
+        user-select: none;
+        cursor: pointer;
+      }
+      tbody td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+      tbody tr:hover { background: #fafafa; }
+      .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .proto { color: var(--muted); font-size: 12px; margin-top: 2px; }
+      .asset { font-weight: 700; }
+      .badge {
+        display:inline-block;
+        padding: 3px 8px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--muted);
+        font-size: 12px;
+        margin-left: 8px;
+      }
+
+      .error {
+        padding: 14px;
+        color: #991b1b;
+        background: #fef2f2;
+        border-top: 1px solid #fecaca;
+        font-size: 13px;
+        white-space: pre-wrap;
+      }
+      .empty {
+        padding: 18px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      footer { margin-top: 14px; color: var(--muted); font-size: 12px; }
+      a { color: inherit; }
     </style>
   </head>
+
   <body>
-    <h1>DeFi Rate Tracker</h1>
-    <div class="card">
-      <div id="status">Loading…</div>
-      <div id="hint" style="opacity:.7;margin-top:6px;"></div>
-    </div>
-    <div class="card">
-      <h3>latest.json</h3>
-      <pre id="out">(waiting)</pre>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>DeFi Rate Tracker</h1>
+          <div class="sub">Compare lending & borrowing rates across protocols.</div>
+        </div>
+        <div class="right">
+          <div class="updated" id="updated">Updated: —</div>
+        </div>
+      </header>
+
+      <div class="controls">
+        <div class="tabs" role="tablist" aria-label="Chains">
+          <button class="tab active" data-seg="evm">EVM</button>
+          <button class="tab" data-seg="solana">Solana</button>
+          <button class="tab" data-seg="sui">Sui</button>
+        </div>
+
+        <div class="search" title="Filter by asset or protocol">
+          🔎
+          <input id="q" placeholder="Filter (e.g., USDC, Aave, Kamino…)" />
+        </div>
+
+        <span class="badge" id="count">0 rows</span>
+      </div>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="symbol">Asset</th>
+              <th data-sort="protocol">Protocol</th>
+              <th class="num" data-sort="supplyApy">Supply APY</th>
+              <th class="num" data-sort="borrowApy">Borrow APY</th>
+              <th class="num" data-sort="utilization">Utilization</th>
+              <th class="num" data-sort="tvlUsd">Supply ($)</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="6" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+        <div id="err" class="error" style="display:none;"></div>
+      </div>
+
+      <footer>
+        Data file: <a href="./data/latest.json">./data/latest.json</a>
+      </footer>
     </div>
 
     <script>
-      (async () => {
-        const status = document.getElementById("status");
-        const out = document.getElementById("out");
-        const hint = document.getElementById("hint");
+      const state = {
+        data: [],
+        seg: "evm",
+        q: "",
+        sortKey: "tvlUsd",
+        sortDir: "desc"
+      };
 
-        try {
-          // IMPORTANT: works for GitHub Pages project sites too
-          const url = new URL("./data/latest.json", window.location.href);
-          hint.textContent = "Fetching: " + url.toString();
+      const fmtPct = (x) => {
+        if (x === null || x === undefined || Number.isNaN(Number(x))) return "—";
+        return (Number(x) * 100).toFixed(2) + "%";
+      };
 
-          const res = await fetch(url.toString(), { cache: "no-store" });
-          if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
+      const fmtUsd = (x) => {
+        if (x === null || x === undefined || Number.isNaN(Number(x))) return "—";
+        const n = Number(x);
+        return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+      };
 
-          const data = await res.json();
-          status.textContent = "Loaded ✅";
-          out.textContent = JSON.stringify(data, null, 2);
-        } catch (e) {
-          status.textContent = "Failed ❌ (see error below)";
-          out.textContent = (e && e.stack) ? e.stack : String(e);
-          console.error(e);
+      const fmtUtil = (x) => {
+        if (x === null || x === undefined || Number.isNaN(Number(x))) return "—";
+        return (Number(x) * 100).toFixed(1) + "%";
+      };
+
+      function compare(a, b, key) {
+        const av = a[key];
+        const bv = b[key];
+        if (key === "symbol" || key === "protocol") {
+          return String(av || "").localeCompare(String(bv || ""));
         }
-      })();
+        return (Number(av) || 0) - (Number(bv) || 0);
+      }
+
+      function filteredRows() {
+        const q = state.q.trim().toLowerCase();
+        return state.data
+          .filter(r => (r.segment || "").toLowerCase() === state.seg)
+          .filter(r => {
+            if (!q) return true;
+            const hay = `${r.symbol || ""} ${r.protocol || ""} ${r.chain || ""}`.toLowerCase();
+            return hay.includes(q);
+          })
+          .sort((a,b) => {
+            const c = compare(a,b,state.sortKey);
+            return state.sortDir === "asc" ? c : -c;
+          });
+      }
+
+      function render() {
+        const tbody = document.getElementById("rows");
+        const rows = filteredRows();
+        document.getElementById("count").textContent = `${rows.length} rows`;
+
+        if (!rows.length) {
+          tbody.innerHTML = `<tr><td colspan="6" class="empty">No results.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = rows.map(r => {
+          const sym = r.symbol || "—";
+          const proto = r.protocol || "—";
+          const supplyApy = fmtPct(r.supplyApy);
+          const borrowApy = fmtPct(r.borrowApy);
+          const util = fmtUtil(r.utilization);
+          const tvl = fmtUsd(r.tvlUsd);
+          return `
+            <tr>
+              <td>
+                <div class="asset">${sym}</div>
+                <div class="proto">${(r.chain || "").toLowerCase()}</div>
+              </td>
+              <td>${proto}</td>
+              <td class="num">${supplyApy}</td>
+              <td class="num">${borrowApy}</td>
+              <td class="num">${util}</td>
+              <td class="num">${tvl}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+
+      function setError(msg) {
+        const err = document.getElementById("err");
+        if (!msg) { err.style.display = "none"; err.textContent = ""; return; }
+        err.style.display = "block";
+        err.textContent = msg;
+      }
+
+      async function load() {
+        try {
+          setError("");
+          const url = new URL("./data/latest.json", window.location.href);
+          const res = await fetch(url.toString(), { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
+
+          const json = await res.json();
+          state.data = Array.isArray(json.markets) ? json.markets : [];
+          document.getElementById("updated").textContent = `Updated: ${json.updatedAt || "—"}`;
+
+          render();
+        } catch (e) {
+          console.error(e);
+          document.getElementById("rows").innerHTML = `<tr><td colspan="6" class="empty">Couldn’t load data.</td></tr>`;
+          setError(String(e && e.stack ? e.stack : e));
+        }
+      }
+
+      // Tabs
+      document.querySelectorAll(".tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          state.seg = btn.dataset.seg;
+          render();
+        });
+      });
+
+      // Search
+      document.getElementById("q").addEventListener("input", (e) => {
+        state.q = e.target.value;
+        render();
+      });
+
+      // Sorting
+      document.querySelectorAll("thead th[data-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+          const key = th.dataset.sort;
+          if (state.sortKey === key) {
+            state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+          } else {
+            state.sortKey = key;
+            state.sortDir = (key === "symbol" || key === "protocol") ? "asc" : "desc";
+          }
+          render();
+        });
+      });
+
+      load();
     </script>
   </body>
 </html>
