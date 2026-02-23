@@ -1,47 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>DeFi Rates</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
+      .card { padding: 12px; border: 1px solid #ddd; border-radius: 10px; margin-top: 12px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #111; color: #0f0; padding: 12px; border-radius: 10px; overflow:auto; }
+    </style>
+  </head>
+  <body>
+    <h1>DeFi Rate Tracker</h1>
+    <div class="card">
+      <div id="status">Loading…</div>
+      <div id="hint" style="opacity:.7;margin-top:6px;"></div>
+    </div>
+    <div class="card">
+      <h3>latest.json</h3>
+      <pre id="out">(waiting)</pre>
+    </div>
 
-<script>
-<p>Last updated: <span id="lastUpdated">—</span></p>
-const LATEST_URL = "./data/latest.json?ts=" + Date.now();
+    <script>
+      (async () => {
+        const status = document.getElementById("status");
+        const out = document.getElementById("out");
+        const hint = document.getElementById("hint");
 
-async function fetchLatest() {
-  const res = await fetch("./data/latest.json?ts=" + Date.now());
-  if (!res.ok) throw new Error("Failed to fetch latest.json: " + res.status);
-  return res.json();
-}
+        try {
+          // IMPORTANT: works for GitHub Pages project sites too
+          const url = new URL("./latest.json", window.location.href);
+          hint.textContent = "Fetching: " + url.toString();
 
-function renderTable(markets) {
-  const table = document.getElementById("rates");
+          const res = await fetch(url.toString(), { cache: "no-store" });
+          if (!res.ok) throw new Error(`HTTP ${res.status} - ${res.statusText}`);
 
-  // clear old rows except header
-  while (table.rows.length > 1) table.deleteRow(1);
-
-  for (const m of markets) {
-    const row = table.insertRow();
-    row.insertCell(0).innerText = m.symbol || m.market || "–";
-    row.insertCell(1).innerText = (m.supplyApy * 100).toFixed(2) + "%";
-    row.insertCell(2).innerText = (m.borrowApy * 100).toFixed(2) + "%";
-    row.insertCell(3).innerText = (m.utilization * 100).toFixed(2) + "%";
-  }
-}
-
-async function loadAndRender() {
-  try {
-    const data = await fetchLatest();
-    document.getElementById("lastUpdated").innerText = new Date(data.updatedAt).toLocaleString();
-    renderTable(data.markets);
-  } catch (err) {
-    console.error(err);
-    // show user-friendly error in the table
-    const table = document.getElementById("rates");
-    while (table.rows.length > 1) table.deleteRow(1);
-    const row = table.insertRow();
-    row.insertCell(0).innerText = "Error loading data";
-    row.insertCell(1).innerText = "-";
-    row.insertCell(2).innerText = "-";
-    row.insertCell(3).innerText = "-";
-  }
-}
-
-loadAndRender();
-setInterval(loadAndRender, 60000);
-</script>
+          const data = await res.json();
+          status.textContent = "Loaded ✅";
+          out.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+          status.textContent = "Failed ❌ (see error below)";
+          out.textContent = (e && e.stack) ? e.stack : String(e);
+          console.error(e);
+        }
+      })();
+    </script>
+  </body>
+</html>
