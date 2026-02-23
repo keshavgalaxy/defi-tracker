@@ -29,7 +29,7 @@
 
         try {
           // IMPORTANT: works for GitHub Pages project sites too
-          const url = new URL("./latest.json", window.location.href);
+          const url = new URL("./data/latest.json", window.location.href);
           hint.textContent = "Fetching: " + url.toString();
 
           const res = await fetch(url.toString(), { cache: "no-store" });
