@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-23T20:18:42.028595+00:00",
+  "updatedAt": "2026-02-23T20:35:05.151334+00:00",
   "markets": [
     {
       "segment": "evm",
@@ -9,10 +9,10 @@
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
       "symbol": "WETH",
       "underlyingToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-      "supplyApy": 0.019737661158216072,
-      "borrowApy": 0.024783315150025447,
-      "utilization": 0.9392783252407636,
-      "tvlUsd": 5376103022.256481
+      "supplyApy": 0.02243364105100134,
+      "borrowApy": 0.028059961695668045,
+      "utilization": 0.9431734947915792,
+      "tvlUsd": 5375770108.29009
     },
     {
       "segment": "evm",
@@ -22,10 +22,10 @@
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
       "symbol": "WBTC",
       "underlyingToken": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
-      "supplyApy": 3.7595704695275666e-05,
-      "borrowApy": 0.0032331403982765864,
-      "utilization": 0.023293596116097066,
-      "tvlUsd": 2655500214.379716
+      "supplyApy": 3.759831967081791e-05,
+      "borrowApy": 0.003233181844872606,
+      "utilization": 0.023294919079932964,
+      "tvlUsd": 2655349670.503171
     },
     {
       "segment": "evm",
@@ -35,10 +35,10 @@
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
       "symbol": "USDC",
       "underlyingToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      "supplyApy": 0.022287357922920654,
-      "borrowApy": 0.03715787605196276,
-      "utilization": 0.6713074501048898,
-      "tvlUsd": 3864206254.660746
+      "supplyApy": 0.022283383654296735,
+      "borrowApy": 0.03715453903617291,
+      "utilization": 0.6712482454521962,
+      "tvlUsd": 3864064534.5578494
     },
     {
       "segment": "evm",
@@ -48,10 +48,10 @@
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
       "symbol": "USDT",
       "underlyingToken": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-      "supplyApy": 0.017557983746349093,
-      "borrowApy": 0.03295140754537286,
-      "utilization": 0.5965306086113307,
-      "tvlUsd": 5758349943.067512
+      "supplyApy": 0.017571438944570434,
+      "borrowApy": 0.032964125684332296,
+      "utilization": 0.5967571407321373,
+      "tvlUsd": 5758549702.079834
     }
   ]
 }
