@@ -29,10 +29,13 @@ ROOT = Path(__file__).resolve().parents[1]
 MARKETS_PATH = ROOT / "data" / "markets.json"
 LATEST_PATH = ROOT / "data" / "latest.json"
 
+# DAI removed
 STABLE_SYMBOLS = {"USDC", "USDT", "USDE", "SUSDE", "PYUSD", "RLUSD", "USDG"}
 
 
 def is_stable(symbol: str) -> bool:
+    if not symbol:
+        return False
     s = symbol.upper().strip()
     if s.startswith("A") and s[1:] in STABLE_SYMBOLS:
         s = s[1:]
@@ -43,105 +46,125 @@ def is_eth(chain_id: int) -> bool:
     return chain_id == 1
 
 
-def sort_markets(rows):
-    def key(r):
-        stable = r["isStable"]
-        eth = r["isEthereum"]
+def sort_markets(rows: list[dict]) -> list[dict]:
+    """
+    Order:
+      1) stables + ethereum, borrow low->high
+      2) stables + non-ethereum, borrow low->high
+      3) non-stables + ethereum, supply high->low
+      4) non-stables + non-ethereum, supply high->low
+    """
+    def key(r: dict):
+        stable = bool(r.get("isStable"))
+        eth = bool(r.get("isEthereum"))
 
         if stable and eth:
             group = 0
-            primary = r["borrowApy"]
+            primary = float(r.get("borrowApy") or 0.0)
         elif stable and not eth:
             group = 1
-            primary = r["borrowApy"]
-        elif not stable and eth:
+            primary = float(r.get("borrowApy") or 0.0)
+        elif (not stable) and eth:
             group = 2
-            primary = -r["supplyApy"]
+            primary = -float(r.get("supplyApy") or 0.0)
         else:
             group = 3
-            primary = -r["supplyApy"]
+            primary = -float(r.get("supplyApy") or 0.0)
 
-        return (group, primary, -r["tvlUsd"])
+        tvl = -float(r.get("tvlUsd") or 0.0)
+        sym = r.get("symbol") or ""
+        chain = r.get("chain") or ""
+        return (group, primary, tvl, sym, chain)
 
     return sorted(rows, key=key)
 
 
 async def main():
     cfg = json.loads(MARKETS_PATH.read_text())
-    aave_cfg = cfg["evm"]["aave"]
+    aave_cfg = cfg.get("evm", {}).get("aave", {})
+    if not isinstance(aave_cfg, dict):
+        raise SystemExit("data/markets.json -> evm -> aave must be an object with keys: minTvlUsd, markets")
 
     min_tvl = float(aave_cfg.get("minTvlUsd", 10_000_000))
-    markets_cfg = aave_cfg["markets"]
+    markets_cfg = aave_cfg.get("markets", [])
+    if not markets_cfg:
+        raise SystemExit("No markets found at data/markets.json -> evm -> aave -> markets")
 
     timeout = aiohttp.ClientTimeout(total=60)
+    connector = aiohttp.TCPConnector(limit=20)
 
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        all_rows = []
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+        all_rows: list[dict] = []
+        totals = {"reserves": 0, "skipped_nulls": 0, "skipped_small": 0, "kept": 0}
 
         for m in markets_cfg:
             variables = {
-                "request": {
-                    "chainId": int(m["chainId"]),
-                    "address": m["market"]
-                }
+                "request": {"chainId": int(m["chainId"]), "address": m["market"]}
             }
 
-            async with session.post(
-                AAVE_URL,
-                json={"query": AAVE_MARKET_QUERY, "variables": variables},
-            ) as resp:
+            async with session.post(AAVE_URL, json={"query": AAVE_MARKET_QUERY, "variables": variables}) as resp:
                 resp.raise_for_status()
                 payload = await resp.json()
 
-            market_data = payload["data"]["market"]
-            chain_id = int(market_data["chain"]["chainId"])
-            chain_name = market_data["chain"]["name"]
+            if payload.get("errors"):
+                raise RuntimeError(f"GraphQL errors: {payload['errors']}")
 
-              for r in market_data["reserves"]:
-                # Some reserves return null supplyInfo/borrowInfo (paused, not borrowable, etc.)
+            market_data = payload.get("data", {}).get("market")
+            if not market_data:
+                raise RuntimeError(f"Market not found for chainId={m['chainId']} address={m['market']}")
+
+            chain_id = int(market_data["chain"]["chainId"])
+            chain_name = (market_data["chain"]["name"] or "").lower()
+
+            reserves = market_data.get("reserves") or []
+            for r in reserves:
+                totals["reserves"] += 1
+
+                token = r.get("underlyingToken") or {}
+                symbol = token.get("symbol") or ""
+                underlying_addr = token.get("address") or ""
+
                 supply_info = r.get("supplyInfo")
                 borrow_info = r.get("borrowInfo")
-                token = r.get("underlyingToken") or {}
-
                 if not supply_info or not borrow_info:
+                    totals["skipped_nulls"] += 1
                     continue
 
-                supply_apy_obj = (supply_info.get("apy") or {})
-                borrow_apy_obj = (borrow_info.get("apy") or {})
-                util_obj = (borrow_info.get("utilizationRate") or {})
-                borrow_total = (borrow_info.get("total") or {})
+                supply_apy_obj = supply_info.get("apy") or {}
+                borrow_apy_obj = borrow_info.get("apy") or {}
+                util_obj = borrow_info.get("utilizationRate") or {}
+                borrow_total = borrow_info.get("total") or {}
+                supply_total_obj = supply_info.get("total") or {}
 
-                # If any critical numbers are missing, skip
-                if supply_apy_obj.get("value") is None:
-                    continue
-                if borrow_apy_obj.get("value") is None:
-                    continue
-                if util_obj.get("value") is None:
-                    continue
-                if borrow_total.get("usdPerToken") is None:
-                    continue
-                if supply_info.get("total") is None or supply_info["total"].get("value") is None:
+                # Skip if any critical numeric field is missing
+                if (
+                    supply_apy_obj.get("value") is None
+                    or borrow_apy_obj.get("value") is None
+                    or util_obj.get("value") is None
+                    or borrow_total.get("usdPerToken") is None
+                    or supply_total_obj.get("value") is None
+                ):
+                    totals["skipped_nulls"] += 1
                     continue
 
                 supply_apy = float(supply_apy_obj["value"])
                 borrow_apy = float(borrow_apy_obj["value"])
                 util = float(util_obj["value"])
 
-                supply_total = float(supply_info["total"]["value"])
+                supply_total = float(supply_total_obj["value"])
                 usd_per_token = float(borrow_total["usdPerToken"])
                 tvl_usd = supply_total * usd_per_token
 
                 if tvl_usd < min_tvl:
+                    totals["skipped_small"] += 1
                     continue
 
-                symbol = token.get("symbol") or "UNKNOWN"
-                underlying_addr = token.get("address") or ""
-
-                all_rows.append({
+                row = {
                     "segment": "evm",
                     "protocol": "aave",
-                    "chain": chain_name.lower(),
+                    "chain": chain_name,
                     "chainId": chain_id,
+                    "market": m["market"],
                     "symbol": symbol,
                     "underlyingToken": underlying_addr,
                     "supplyApy": supply_apy,
@@ -150,16 +173,22 @@ async def main():
                     "tvlUsd": tvl_usd,
                     "isStable": is_stable(symbol),
                     "isEthereum": is_eth(chain_id),
-                })
-    all_rows = sort_markets(all_rows)
+                }
+
+                all_rows.append(row)
+                totals["kept"] += 1
+
+        all_rows = sort_markets(all_rows)
 
     out = {
         "updatedAt": datetime.now(timezone.utc).isoformat(),
-        "markets": all_rows
+        "markets": all_rows,
+        "counts": totals,
+        "minTvlUsd": min_tvl,
     }
 
-    LATEST_PATH.write_text(json.dumps(out, indent=2))
-    print(f"Wrote {len(all_rows)} markets")
+    LATEST_PATH.write_text(json.dumps(out, indent=2) + "\n")
+    print(f"Wrote {LATEST_PATH} with {len(all_rows)} markets. Stats: {totals}")
 
 
 if __name__ == "__main__":
