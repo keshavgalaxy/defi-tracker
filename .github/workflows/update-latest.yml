@@ -29,7 +29,24 @@ jobs:
         run: |
           python scripts/update_latest.py
 
-      - name: Commit & push if changed
+      - name: Commit & push (overwrite latest.json)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/latest.json
+          git commit -m "Update data/latest.json" || echo "No changes to commit"
+
+          # Always prefer remote changes except for data/latest.json which we overwrite
+          git fetch origin main
+          git checkout origin/main -- data/latest.json
+          # Wait: above would restore remote; we want OUR generated file
+          # So re-add our generated file again:
+          git add data/latest.json
+          git commit -m "Update data/latest.json (regen)" || echo "No changes to commit"
+
+          # Push without rebasing/merging. If remote advanced, retry once.
+          git push origin HEAD:main --force-with-lease
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
