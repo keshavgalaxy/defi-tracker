@@ -97,19 +97,45 @@ async def main():
             chain_id = int(market_data["chain"]["chainId"])
             chain_name = market_data["chain"]["name"]
 
-            for r in market_data["reserves"]:
-                supply_apy = float(r["supplyInfo"]["apy"]["value"])
-                borrow_apy = float(r["borrowInfo"]["apy"]["value"])
-                util = float(r["borrowInfo"]["utilizationRate"]["value"])
+              for r in market_data["reserves"]:
+                # Some reserves return null supplyInfo/borrowInfo (paused, not borrowable, etc.)
+                supply_info = r.get("supplyInfo")
+                borrow_info = r.get("borrowInfo")
+                token = r.get("underlyingToken") or {}
 
-                supply_total = float(r["supplyInfo"]["total"]["value"])
-                usd_per_token = float(r["borrowInfo"]["total"]["usdPerToken"])
+                if not supply_info or not borrow_info:
+                    continue
+
+                supply_apy_obj = (supply_info.get("apy") or {})
+                borrow_apy_obj = (borrow_info.get("apy") or {})
+                util_obj = (borrow_info.get("utilizationRate") or {})
+                borrow_total = (borrow_info.get("total") or {})
+
+                # If any critical numbers are missing, skip
+                if supply_apy_obj.get("value") is None:
+                    continue
+                if borrow_apy_obj.get("value") is None:
+                    continue
+                if util_obj.get("value") is None:
+                    continue
+                if borrow_total.get("usdPerToken") is None:
+                    continue
+                if supply_info.get("total") is None or supply_info["total"].get("value") is None:
+                    continue
+
+                supply_apy = float(supply_apy_obj["value"])
+                borrow_apy = float(borrow_apy_obj["value"])
+                util = float(util_obj["value"])
+
+                supply_total = float(supply_info["total"]["value"])
+                usd_per_token = float(borrow_total["usdPerToken"])
                 tvl_usd = supply_total * usd_per_token
 
                 if tvl_usd < min_tvl:
                     continue
 
-                symbol = r["underlyingToken"]["symbol"]
+                symbol = token.get("symbol") or "UNKNOWN"
+                underlying_addr = token.get("address") or ""
 
                 all_rows.append({
                     "segment": "evm",
@@ -117,6 +143,7 @@ async def main():
                     "chain": chain_name.lower(),
                     "chainId": chain_id,
                     "symbol": symbol,
+                    "underlyingToken": underlying_addr,
                     "supplyApy": supply_apy,
                     "borrowApy": borrow_apy,
                     "utilization": util,
@@ -124,7 +151,6 @@ async def main():
                     "isStable": is_stable(symbol),
                     "isEthereum": is_eth(chain_id),
                 })
-
     all_rows = sort_markets(all_rows)
 
     out = {
