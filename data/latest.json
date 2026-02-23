@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-23T20:35:05.151334+00:00",
+  "updatedAt": "2026-02-23T22:07:12.424646+00:00",
   "markets": [
     {
       "segment": "evm",
@@ -7,25 +7,14 @@
       "chain": "ethereum",
       "chainId": 1,
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
-      "symbol": "WETH",
-      "underlyingToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-      "supplyApy": 0.02243364105100134,
-      "borrowApy": 0.028059961695668045,
-      "utilization": 0.9431734947915792,
-      "tvlUsd": 5375770108.29009
-    },
-    {
-      "segment": "evm",
-      "protocol": "aave",
-      "chain": "ethereum",
-      "chainId": 1,
-      "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
-      "symbol": "WBTC",
-      "underlyingToken": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
-      "supplyApy": 3.759831967081791e-05,
-      "borrowApy": 0.003233181844872606,
-      "utilization": 0.023294919079932964,
-      "tvlUsd": 2655349670.503171
+      "symbol": "USDT",
+      "underlyingToken": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "supplyApy": 0.01756163679833426,
+      "borrowApy": 0.03295486095610197,
+      "utilization": 0.5965921111612126,
+      "tvlUsd": 5760413900.1823435,
+      "isStable": true,
+      "isEthereum": true
     },
     {
       "segment": "evm",
@@ -35,10 +24,12 @@
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
       "symbol": "USDC",
       "underlyingToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      "supplyApy": 0.022283383654296735,
-      "borrowApy": 0.03715453903617291,
-      "utilization": 0.6712482454521962,
-      "tvlUsd": 3864064534.5578494
+      "supplyApy": 0.022191818140999676,
+      "borrowApy": 0.03707757295525039,
+      "utilization": 0.6698827652920593,
+      "tvlUsd": 3865733622.5000973,
+      "isStable": true,
+      "isEthereum": true
     },
     {
       "segment": "evm",
@@ -46,12 +37,36 @@
       "chain": "ethereum",
       "chainId": 1,
       "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
-      "symbol": "USDT",
-      "underlyingToken": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-      "supplyApy": 0.017571438944570434,
-      "borrowApy": 0.032964125684332296,
-      "utilization": 0.5967571407321373,
-      "tvlUsd": 5758549702.079834
+      "symbol": "WETH",
+      "underlyingToken": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "supplyApy": 0.021926007197313104,
+      "borrowApy": 0.027441073849341434,
+      "utilization": 0.942571315760261,
+      "tvlUsd": 5426945548.051844,
+      "isStable": false,
+      "isEthereum": true
+    },
+    {
+      "segment": "evm",
+      "protocol": "aave",
+      "chain": "ethereum",
+      "chainId": 1,
+      "market": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+      "symbol": "WBTC",
+      "underlyingToken": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+      "supplyApy": 3.735199758993517e-05,
+      "borrowApy": 0.003229273911948785,
+      "utilization": 0.02317026700894967,
+      "tvlUsd": 2685812312.623729,
+      "isStable": false,
+      "isEthereum": true
     }
-  ]
+  ],
+  "counts": {
+    "total": 4,
+    "stable": 2,
+    "nonStable": 2,
+    "ethereum": 4,
+    "nonEthereum": 0
+  }
 }
