@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Aave Rates</title>
+  <style>
+    body { font-family: Arial; padding: 40px; }
+    table { border-collapse: collapse; width: 500px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  </style>
+</head>
+<body>
+
+<h2>Aave V3 Ethereum Rates</h2>
+
+<table id="rates">
+  <tr>
+    <th>Token</th>
+    <th>Supply APY</th>
+    <th>Borrow APY</th>
+    <th>Utilization</th>
+  </tr>
+</table>
+
+<script>
+const MARKET = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2";
+const TOKENS = {
+  "WETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  "WBTC": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+  "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+};
+
+const QUERY = `
+query GetReserve($request: ReserveRequest!) {
+  reserve(request: $request) {
+    supplyInfo { apy { value } }
+    borrowInfo {
+      apy { value }
+      utilizationRate { value }
+    }
+  }
+}
+`;
+
+async function fetchRate(symbol, address) {
+  const response = await fetch("https://api.v3.aave.com/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query: QUERY,
+      variables: {
+        request: {
+          chainId: 1,
+          market: MARKET,
+          underlyingToken: address
+        }
+      }
+    })
+  });
+
+  const data = await response.json();
+  const r = data.data.reserve;
+
+  return {
+    supply: (parseFloat(r.supplyInfo.apy.value) * 100).toFixed(2) + "%",
+    borrow: (parseFloat(r.borrowInfo.apy.value) * 100).toFixed(2) + "%",
+    util: (parseFloat(r.borrowInfo.utilizationRate.value) * 100).toFixed(2) + "%"
+  };
+}
+
+async function loadRates() {
+  const table = document.getElementById("rates");
+
+  for (const [symbol, address] of Object.entries(TOKENS)) {
+    const rate = await fetchRate(symbol, address);
+
+    const row = table.insertRow();
+    row.insertCell(0).innerText = symbol;
+    row.insertCell(1).innerText = rate.supply;
+    row.insertCell(2).innerText = rate.borrow;
+    row.insertCell(3).innerText = rate.util;
+  }
+}
+
+loadRates();
+</script>
+
+</body>
+</html>
