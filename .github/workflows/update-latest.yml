@@ -2,11 +2,15 @@ name: update-latest-json
 
 on:
   schedule:
-    - cron: "*/5 * * * *"  # every 5 minutes
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: update-latest-json
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -14,6 +18,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -26,15 +32,17 @@ jobs:
       - name: Generate data/latest.json
         run: python scripts/update_latest.py
 
-         - name: Commit and push if changed
+      - name: Commit and push if changed
+        shell: bash
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
+          set -e
+          if [[ -n "$(git status --porcelain)" ]]; then
             git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git add data/latest.json
             git commit -m "Update latest.json"
-            git pull --rebase
-            git push
+            git pull --rebase origin main
+            git push origin HEAD:main
           else
             echo "No changes to commit"
           fi
