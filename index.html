@@ -71,9 +71,11 @@ async function fetchRate(symbol, address) {
 async function loadRates() {
   const table = document.getElementById("rates");
 
+  // clear old rows except header
+  while (table.rows.length > 1) table.deleteRow(1);
+
   for (const [symbol, address] of Object.entries(TOKENS)) {
     const rate = await fetchRate(symbol, address);
-
     const row = table.insertRow();
     row.insertCell(0).innerText = symbol;
     row.insertCell(1).innerText = rate.supply;
@@ -83,6 +85,7 @@ async function loadRates() {
 }
 
 loadRates();
+setInterval(loadRates, 60000);
 </script>
 
 </body>
