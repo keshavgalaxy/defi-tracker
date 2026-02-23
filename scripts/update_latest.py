@@ -7,14 +7,19 @@ import aiohttp
 
 AAVE_URL = "https://api.v3.aave.com/graphql"
 
-AAVE_QUERY = """
-query GetReserve($request: ReserveRequest!) {
-  reserve(request: $request) {
-    supplyInfo { apy { value } total { value } }
-    borrowInfo {
-      apy { value }
-      total { usdPerToken }
-      utilizationRate { value }
+AAVE_MARKET_QUERY = """
+query GetMarket($request: MarketRequest!) {
+  market(request: $request) {
+    address
+    chain { chainId name }
+    reserves {
+      underlyingToken { address symbol }
+      supplyInfo { apy { value } total { value } }
+      borrowInfo {
+        apy { value }
+        total { usdPerToken }
+        utilizationRate { value }
+      }
     }
   }
 }
@@ -24,151 +29,111 @@ ROOT = Path(__file__).resolve().parents[1]
 MARKETS_PATH = ROOT / "data" / "markets.json"
 LATEST_PATH = ROOT / "data" / "latest.json"
 
-# Minimal stable classification (DAI removed)
-STABLE_SYMBOLS = {
-    "USDC", "USDT", "USDE", "SUSDE", "PYUSD", "RLUSD", "USDG",
-    # add more later if needed
-}
+STABLE_SYMBOLS = {"USDC", "USDT", "USDE", "SUSDE", "PYUSD", "RLUSD", "USDG"}
+
 
 def is_stable(symbol: str) -> bool:
-    if not symbol:
-        return False
     s = symbol.upper().strip()
-
-    # common wrappers you may encounter
-    if s.startswith("A") and s[1:] in STABLE_SYMBOLS:  # aUSDC etc
+    if s.startswith("A") and s[1:] in STABLE_SYMBOLS:
         s = s[1:]
-    if s.startswith("W") and s[1:] in STABLE_SYMBOLS:  # wUSDC etc (rare)
-        s = s[1:]
-
     return s in STABLE_SYMBOLS
 
-def is_ethereum_chain(chain: str, chain_id: int) -> bool:
-    # use both so you're robust to how you label "chain" in markets.json
-    if chain_id == 1:
-        return True
-    c = (chain or "").lower().strip()
-    return c in {"ethereum", "eth", "mainnet"}
+
+def is_eth(chain_id: int) -> bool:
+    return chain_id == 1
 
 
-async def fetch_aave(session: aiohttp.ClientSession, item: dict) -> dict:
-    variables = {
-        "request": {
-            "chainId": int(item["chainId"]),
-            "market": item["market"],
-            "underlyingToken": item["underlyingToken"],
-        }
-    }
+def sort_markets(rows):
+    def key(r):
+        stable = r["isStable"]
+        eth = r["isEthereum"]
 
-    async with session.post(AAVE_URL, json={"query": AAVE_QUERY, "variables": variables}) as resp:
-        resp.raise_for_status()
-        payload = await resp.json()
-
-    r = payload["data"]["reserve"]
-    if r is None:
-        raise RuntimeError(
-            f"Aave reserve returned null for symbol={item.get('symbol')} chainId={item.get('chainId')}"
-        )
-
-    supply_apy = float(r["supplyInfo"]["apy"]["value"])
-    borrow_apy = float(r["borrowInfo"]["apy"]["value"])
-    util = float(r["borrowInfo"]["utilizationRate"]["value"])
-
-    supply_total = float(r["supplyInfo"]["total"]["value"])
-    usd_per_token = float(r["borrowInfo"]["total"]["usdPerToken"])
-    tvl_usd = supply_total * usd_per_token
-
-    sym = item["symbol"]
-    chain = item.get("chain", "unknown")
-    chain_id = int(item["chainId"])
-
-    return {
-        "segment": "evm",
-        "protocol": "aave",
-        "chain": chain,
-        "chainId": chain_id,
-        "market": item["market"],
-        "symbol": sym,
-        "underlyingToken": item["underlyingToken"],
-        "supplyApy": supply_apy,
-        "borrowApy": borrow_apy,
-        "utilization": util,
-        "tvlUsd": tvl_usd,
-        "isStable": is_stable(sym),
-        "isEthereum": is_ethereum_chain(chain, chain_id),
-    }
-
-
-def sort_markets(rows: list[dict]) -> list[dict]:
-    """
-    Order:
-      1) stables + ethereum, borrow low->high
-      2) stables + non-ethereum, borrow low->high
-      3) non-stables + ethereum, supply high->low
-      4) non-stables + non-ethereum, supply high->low
-    """
-
-    def key(r: dict):
-        stable = bool(r.get("isStable"))
-        eth = bool(r.get("isEthereum"))
-
-        # group rank
         if stable and eth:
             group = 0
+            primary = r["borrowApy"]
         elif stable and not eth:
             group = 1
-        elif (not stable) and eth:
+            primary = r["borrowApy"]
+        elif not stable and eth:
             group = 2
+            primary = -r["supplyApy"]
         else:
             group = 3
+            primary = -r["supplyApy"]
 
-        borrow = float(r.get("borrowApy") or 0.0)
-        supply = float(r.get("supplyApy") or 0.0)
-        tvl = float(r.get("tvlUsd") or 0.0)
-
-        # within-group sort
-        if group in (0, 1):
-            # stables: low borrow first
-            primary = borrow
-        else:
-            # non-stables: high supply first
-            primary = -supply
-
-        # tie-breaker: bigger markets first
-        return (group, primary, -tvl, (r.get("symbol") or ""), (r.get("chain") or ""))
+        return (group, primary, -r["tvlUsd"])
 
     return sorted(rows, key=key)
 
 
 async def main():
-    markets_cfg = json.loads(MARKETS_PATH.read_text())
+    cfg = json.loads(MARKETS_PATH.read_text())
+    aave_cfg = cfg["evm"]["aave"]
 
-    aave_items = markets_cfg.get("evm", {}).get("aave", [])
-    if not aave_items:
-        raise SystemExit("No markets found at data/markets.json -> evm -> aave")
+    min_tvl = float(aave_cfg.get("minTvlUsd", 10_000_000))
+    markets_cfg = aave_cfg["markets"]
 
-    timeout = aiohttp.ClientTimeout(total=30)
-    connector = aiohttp.TCPConnector(limit=50)
+    timeout = aiohttp.ClientTimeout(total=60)
 
-    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
-        results = await asyncio.gather(*[fetch_aave(session, it) for it in aave_items])
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        all_rows = []
 
-    results = sort_markets(results)
+        for m in markets_cfg:
+            variables = {
+                "request": {
+                    "chainId": int(m["chainId"]),
+                    "address": m["market"]
+                }
+            }
+
+            async with session.post(
+                AAVE_URL,
+                json={"query": AAVE_MARKET_QUERY, "variables": variables},
+            ) as resp:
+                resp.raise_for_status()
+                payload = await resp.json()
+
+            market_data = payload["data"]["market"]
+            chain_id = int(market_data["chain"]["chainId"])
+            chain_name = market_data["chain"]["name"]
+
+            for r in market_data["reserves"]:
+                supply_apy = float(r["supplyInfo"]["apy"]["value"])
+                borrow_apy = float(r["borrowInfo"]["apy"]["value"])
+                util = float(r["borrowInfo"]["utilizationRate"]["value"])
+
+                supply_total = float(r["supplyInfo"]["total"]["value"])
+                usd_per_token = float(r["borrowInfo"]["total"]["usdPerToken"])
+                tvl_usd = supply_total * usd_per_token
+
+                if tvl_usd < min_tvl:
+                    continue
+
+                symbol = r["underlyingToken"]["symbol"]
+
+                all_rows.append({
+                    "segment": "evm",
+                    "protocol": "aave",
+                    "chain": chain_name.lower(),
+                    "chainId": chain_id,
+                    "symbol": symbol,
+                    "supplyApy": supply_apy,
+                    "borrowApy": borrow_apy,
+                    "utilization": util,
+                    "tvlUsd": tvl_usd,
+                    "isStable": is_stable(symbol),
+                    "isEthereum": is_eth(chain_id),
+                })
+
+    all_rows = sort_markets(all_rows)
 
     out = {
         "updatedAt": datetime.now(timezone.utc).isoformat(),
-        "markets": results,
-        "counts": {
-            "total": len(results),
-            "stable": sum(1 for r in results if r.get("isStable")),
-            "nonStable": sum(1 for r in results if not r.get("isStable")),
-            "ethereum": sum(1 for r in results if r.get("isEthereum")),
-            "nonEthereum": sum(1 for r in results if not r.get("isEthereum")),
-        },
+        "markets": all_rows
     }
 
-    LATEST_PATH.write_text(json.dumps(out, indent=2) + "\n")
-    print(f"Wrote {LATEST_PATH} with {len(results)} markets")
+    LATEST_PATH.write_text(json.dumps(out, indent=2))
+    print(f"Wrote {len(all_rows)} markets")
 
 
 if __name__ == "__main__":
